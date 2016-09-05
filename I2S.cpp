@@ -327,7 +327,7 @@ int I2S::playMono(DFILE &file, float vol, float speed, uint32_t offset) {
             _samples[i].speed = speed;
             _samples[i].vol = vol;
             _samples[i].data = NULL;
-            _samples[i].file = file;
+            _samples[i].file = &file;
             _samples[i].len = 0;
             _samples[i].pos = offset;
             _samples[i].offset = offset;
@@ -367,7 +367,7 @@ int I2S::playMonoLeft(DFILE &file, float vol, float speed, uint32_t offset) {
             _samples[i].speed = speed;
             _samples[i].vol = vol;
             _samples[i].data = NULL;
-            _samples[i].file = file;
+            _samples[i].file = &file;
             _samples[i].len = 0;
             _samples[i].pos = offset;
             _samples[i].offset = offset;
@@ -407,7 +407,7 @@ int I2S::playMonoRight(DFILE &file, float vol, float speed, uint32_t offset) {
             _samples[i].speed = speed;
             _samples[i].vol = vol;
             _samples[i].data = NULL;
-            _samples[i].file = file;
+            _samples[i].file = &file;
             _samples[i].len = 0;
             _samples[i].pos = offset;
             _samples[i].offset = offset;
