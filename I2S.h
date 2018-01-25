@@ -1,7 +1,8 @@
 #ifndef _I2S_H
 #define _I2S_H
 
-#define BSIZE 1024
+//#define BSIZE 1024
+#define BSIZE 4096
 
 #include <Arduino.h>
 #include <DSPI.h>
@@ -15,28 +16,33 @@ struct sample_s {
     float speed;            // Fractional playback speed (1.0 = normal speed)
     float vol;              // Fractional playback volume (1.0 = normal volume)
     uint8_t flags;          // Various settings for the sample
-    uint32_t offset;        // Offset to start playing or looping from
+    uint32_t offset;        // Offset to start playing from
+    uint32_t loop_start;    // When looping go back to here
+    uint32_t loop_end;      // Loop back when you get here, and play from here for aftertouch
 };
 
-#define MAX_SAMPLES 10
+#define MAX_SAMPLES 50
 
 // This sample is active
-#define SMP_ACTIVE  0x01
+#define SMP_ACTIVE      0x01
 
 // This is a stereo sample data set
-#define SMP_STEREO  0x02
+#define SMP_STEREO      0x02
 
 // Play the sample out of the left speaker
-#define SMP_LEFT    0x04
+#define SMP_LEFT        0x04
 
 // Play the sample out of the right speaker
-#define SMP_RIGHT   0x08
+#define SMP_RIGHT       0x08
 
 // Loop the sample until stopper
-#define SMP_LOOP    0x10
+#define SMP_LOOP        0x10
+
+// After playing a loop play the aftertouch portion
+#define SMP_AFTERTOUCH  0x20
 
 // Sample is playing
-#define SMP_PLAYING 0x20
+#define SMP_PLAYING     0x80
 
 typedef struct sample_s sample;
 
@@ -57,6 +63,12 @@ class I2S {
         void initSPI();
         void initDMA();  
 
+        void uninitClock();
+        void uninitSPI();
+        void uninitDMA();  
+
+        static int16_t mix(int16_t a, int16_t b);
+
         static bool doFillBuffer(int32_t *buf);
 
         static void __USER_ISR DMA1ISR(void);
@@ -65,6 +77,7 @@ class I2S {
 	public:
 		I2S(uint32_t sr);
 		void begin();
+        void end();
         bool ready() { return ((!_bufferAFull) || (!_bufferBFull)); }
         bool fill(int16_t sample);
         bool fill(int16_t s1, int16_t s2);
@@ -81,9 +94,12 @@ class I2S {
         void stop(int s);
         void resume(int s);
         void cancel(int s);
+        void setSpeed(int s, float v);
         void setVolume(int s, float v);
-        void enableLoop(int s);
+        void enableLoop(int s, int st, int e, bool a);
         void disableLoop(int s);
+        bool isPlaying(int s);
+        void setSampleRate(uint32_t r);
 };
 
 #endif

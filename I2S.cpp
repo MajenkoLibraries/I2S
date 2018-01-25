@@ -13,10 +13,27 @@ I2S::I2S(uint32_t s) {
     _sampleRate = s;
 }
 
+void I2S::setSampleRate(uint32_t r) {
+    _sampleRate = r;
+}
+
 void I2S::begin() {
     initClock();       
     initSPI();
     initDMA();  
+}
+
+void I2S::end() {
+    uninitDMA();  
+    uninitSPI();
+    uninitClock();       
+}
+
+void I2S::uninitDMA() {
+    DCH1CONbits.CHEN = 0;
+    DCH2CONbits.CHEN = 0;
+    clearIntEnable(_DMA1_VECTOR);
+    clearIntEnable(_DMA2_VECTOR);
 }
 
 void I2S::initDMA() {
@@ -53,6 +70,10 @@ void I2S::initDMA() {
     DMACONbits.ON = 1;
 }
 
+void I2S::uninitClock() {
+    REFO1CONbits.ON=0;
+}
+
 void I2S::initClock() {
     uint32_t refClock = _sampleRate * 256;
     uint32_t inputFrequency = getPeripheralClock(); ///2;
@@ -68,6 +89,10 @@ void I2S::initClock() {
     REFO1TRIMbits.ROTRIM=refTrim; // 464;
     REFO1CONbits.ACTIVE=1;
     REFO1CONbits.ON=1;
+}
+
+void I2S::uninitSPI() {
+    SPI2CONbits.ON = 0;
 }
 
 void I2S::initSPI() {
@@ -149,50 +174,56 @@ bool I2S::doFillBuffer(int32_t *buf) {
     for (int sno = 0; sno < BSIZE/2; sno++) {
         int32_t left = 0;
         int32_t right = 0;
-        int playingl = 0;
-        int playingr = 0;
+//        int playingl = 0;
+//        int playingr = 0;
 
         for (int i = 0; i < MAX_SAMPLES; i++) {
             if ((_samples[i].flags & SMP_ACTIVE) && (_samples[i].flags & SMP_PLAYING)) {
                 if (_samples[i].data != NULL) {
                     uint32_t p = (uint32_t)_samples[i].pos;
-                    float pct = _samples[i].pos - (int)_samples[i].pos;
+//                    float pct = _samples[i].pos - (int)_samples[i].pos;
                     if (_samples[i].flags & SMP_STEREO) {
                         p <<= 1; // Double it
                         if (_samples[i].flags & SMP_LEFT) {
-                            playingl++;
-                            float low = _samples[i].data[p] * (1.0-pct);
-                            float high = _samples[i].data[p+2] * pct;
-                            left += (low + high) * _samples[i].vol;
+//                            playingl++;
+//                            float low = _samples[i].data[p] * (1.0-pct);
+//                            float high = _samples[i].data[p+2] * pct;
+//                            left = mix(left, (low + high) * _samples[i].vol);
+                            left = mix(left, _samples[i].data[p] * _samples[i].vol);
                         }
                         if (_samples[i].flags & SMP_RIGHT) {
-                            playingr++;
-                            float low = _samples[i].data[p+1] * (1.0-pct);
-                            float high = _samples[i].data[p+3] * pct;
-                            right += (low + high) * _samples[i].vol;
-                            right += (_samples[i].data[p + 1] * _samples[i].vol);
+//                            playingr++;
+//                            float low = _samples[i].data[p+1] * (1.0-pct);
+//                            float high = _samples[i].data[p+3] * pct;
+//                            right = mix(right, (low + high) * _samples[i].vol);
+                            right = mix(right, _samples[i].data[p+1] * _samples[i].vol);
                         }
                     } else {
                         if (_samples[i].flags & SMP_LEFT) {
-                            playingl++;
-                            float low = _samples[i].data[p] * (1.0-pct);
-                            float high = _samples[i].data[p+1] * pct;
-                            left += (low + high) * _samples[i].vol;
+//                            playingl++;
+//                            float low = _samples[i].data[p] * (1.0-pct);
+//                            float high = _samples[i].data[p+1] * pct;
+//                            left = mix(left, (low + high) * _samples[i].vol);
+                            left = mix(left, _samples[i].data[p] * _samples[i].vol);
                         }
                         if (_samples[i].flags & SMP_RIGHT) {
-                            playingr++;
-                            float low = _samples[i].data[p] * (1.0-pct);
-                            float high = _samples[i].data[p+1] * pct;
-                            right += (low + high) * _samples[i].vol;
+//                            playingr++;
+//                            float low = _samples[i].data[p] * (1.0-pct);
+//                            float high = _samples[i].data[p+1] * pct;
+//                            right = mix(right, (low + high) * _samples[i].vol);
+                            right = mix(right, _samples[i].data[p] * _samples[i].vol);
                         }
                     }
 
                     _samples[i].pos += _samples[i].speed;
-                    if (((uint32_t)_samples[i].pos) >= _samples[i].len) {
-                        if (_samples[i].flags & SMP_LOOP) {
-                            _samples[i].pos = _samples[i].offset;
-                        } else {
-                            _samples[i].flags = 0; // Finished with it.
+
+                    if (_samples[i].flags & SMP_LOOP) {
+                        if (_samples[i].pos >= _samples[i].loop_end) {
+                            _samples[i].pos = _samples[i].loop_start;
+                        }
+                    } else {
+                        if (((uint32_t)_samples[i].pos) >= _samples[i].len) {
+                            _samples[i].flags = 0;
                         }
                     }
                 } else if (_samples[i].file != NULL) {
@@ -211,12 +242,12 @@ bool I2S::doFillBuffer(int32_t *buf) {
                             }
                         } else {
                             if (_samples[i].flags & SMP_LEFT) {
-                                playingl++;
-                                left += sl * _samples[i].vol;
+//                                playingl++;
+                                left = mix(left, sl * _samples[i].vol);
                             }
                             if (_samples[i].flags & SMP_RIGHT) {
-                                playingr++;
-                                right += sr * _samples[i].vol;
+//                                playingr++;
+                                right = mix(right, sr * _samples[i].vol);
                             }
                         }
                     } else {
@@ -232,37 +263,37 @@ bool I2S::doFillBuffer(int32_t *buf) {
                             }
                         } else {
                             if (_samples[i].flags & SMP_LEFT) {
-                                playingl++;
-                                left += sm * _samples[i].vol;
+//                                playingl++;
+                                left = mix(left, sm * _samples[i].vol);
                             }
                             if (_samples[i].flags & SMP_RIGHT) {
-                                playingr++;
-                                right += sm * _samples[i].vol;
+//                                playingr++;
+                                right = mix(right, sm * _samples[i].vol);
                             }
                         }
                     }
                 }
             }
         }
-        if (playingl == 0) {
-            buf[sno<<1] = 0;
-        } else {
-            left /= playingl;
+//        if (playingl == 0) {
+//            buf[sno<<1] = 0;
+//        } else {
+//            left /= playingl;
             buf[sno<<1] = left << 16;
-        }
-        if (playingr == 0) {
-            buf[(sno<<1) + 1] = 0;
-        } else {
-            right /= playingr;
+//        }
+//        if (playingr == 0) {
+//            buf[(sno<<1) + 1] = 0;
+//        } else {
+//            right /= playingr;
             buf[(sno<<1) + 1] = right << 16;
-        }
+//        }
     }
     return true;
 }
 
 int I2S::playStereo(const int16_t *data, uint32_t len, float vol, float speed, uint32_t offset) {
     for (int i = 0; i < MAX_SAMPLES; i++) {
-        uint32_t s = disableInterrupts();
+//        uint32_t s = disableInterrupts();
         if ((_samples[i].flags & SMP_ACTIVE) == 0) {
             _samples[i].speed = speed;
             _samples[i].vol = vol;
@@ -272,17 +303,17 @@ int I2S::playStereo(const int16_t *data, uint32_t len, float vol, float speed, u
             _samples[i].pos = offset;
             _samples[i].offset = offset;
             _samples[i].flags = SMP_ACTIVE | SMP_STEREO | SMP_LEFT | SMP_RIGHT | SMP_PLAYING;
-            restoreInterrupts(s);
+//            restoreInterrupts(s);
             return i;
         }
-        restoreInterrupts(s);
+//        restoreInterrupts(s);
     }
     return -1;
 }
 
 int I2S::playStereo(DFILE &file, float vol, float speed, uint32_t offset) {
     for (int i = 0; i < MAX_SAMPLES; i++) {
-        uint32_t s = disableInterrupts();
+//        uint32_t s = disableInterrupts();
         if ((_samples[i].flags & SMP_ACTIVE) == 0) {
             _samples[i].speed = speed;
             _samples[i].vol = vol;
@@ -292,17 +323,17 @@ int I2S::playStereo(DFILE &file, float vol, float speed, uint32_t offset) {
             _samples[i].pos = offset;
             _samples[i].offset = offset;
             _samples[i].flags = SMP_ACTIVE | SMP_STEREO | SMP_LEFT | SMP_RIGHT | SMP_PLAYING;
-            restoreInterrupts(s);
+//            restoreInterrupts(s);
             return i;
         }
-        restoreInterrupts(s);
+//        restoreInterrupts(s);
     }
     return -1;
 }
 
 int I2S::playMono(const int16_t *data, uint32_t len, float vol, float speed, uint32_t offset) {
     for (int i = 0; i < MAX_SAMPLES; i++) {
-        uint32_t s = disableInterrupts();
+//        uint32_t s = disableInterrupts();
         if ((_samples[i].flags & SMP_ACTIVE) == 0) {
             _samples[i].speed = speed;
             _samples[i].vol = vol;
@@ -312,17 +343,17 @@ int I2S::playMono(const int16_t *data, uint32_t len, float vol, float speed, uin
             _samples[i].pos = offset;
             _samples[i].offset = offset;
             _samples[i].flags = SMP_ACTIVE | SMP_LEFT | SMP_RIGHT | SMP_PLAYING;
-            restoreInterrupts(s);
+//            restoreInterrupts(s);
             return i;
         }
-        restoreInterrupts(s);
+//        restoreInterrupts(s);
     }
     return -1;
 }
 
 int I2S::playMono(DFILE &file, float vol, float speed, uint32_t offset) {
     for (int i = 0; i < MAX_SAMPLES; i++) {
-        uint32_t s = disableInterrupts();
+//        uint32_t s = disableInterrupts();
         if ((_samples[i].flags & SMP_ACTIVE) == 0) {
             _samples[i].speed = speed;
             _samples[i].vol = vol;
@@ -332,17 +363,17 @@ int I2S::playMono(DFILE &file, float vol, float speed, uint32_t offset) {
             _samples[i].pos = offset;
             _samples[i].offset = offset;
             _samples[i].flags = SMP_ACTIVE | SMP_LEFT | SMP_RIGHT | SMP_PLAYING;
-            restoreInterrupts(s);
+//            restoreInterrupts(s);
             return i;
         }
-        restoreInterrupts(s);
+//        restoreInterrupts(s);
     }
     return -1;
 }
 
 int I2S::playMonoLeft(const int16_t *data, uint32_t len, float vol, float speed, uint32_t offset) {
     for (int i = 0; i < MAX_SAMPLES; i++) {
-        uint32_t s = disableInterrupts();
+//        uint32_t s = disableInterrupts();
         if ((_samples[i].flags & SMP_ACTIVE) == 0) {
             _samples[i].speed = speed;
             _samples[i].vol = vol;
@@ -352,17 +383,17 @@ int I2S::playMonoLeft(const int16_t *data, uint32_t len, float vol, float speed,
             _samples[i].pos = offset;
             _samples[i].offset = offset;
             _samples[i].flags = SMP_ACTIVE | SMP_LEFT | SMP_PLAYING;
-            restoreInterrupts(s);
+//            restoreInterrupts(s);
             return i;
         }
-        restoreInterrupts(s);
+//        restoreInterrupts(s);
     }
     return -1;
 }
 
 int I2S::playMonoLeft(DFILE &file, float vol, float speed, uint32_t offset) {
     for (int i = 0; i < MAX_SAMPLES; i++) {
-        uint32_t s = disableInterrupts();
+//        uint32_t s = disableInterrupts();
         if ((_samples[i].flags & SMP_ACTIVE) == 0) {
             _samples[i].speed = speed;
             _samples[i].vol = vol;
@@ -372,17 +403,17 @@ int I2S::playMonoLeft(DFILE &file, float vol, float speed, uint32_t offset) {
             _samples[i].pos = offset;
             _samples[i].offset = offset;
             _samples[i].flags = SMP_ACTIVE | SMP_LEFT | SMP_PLAYING;
-            restoreInterrupts(s);
+//            restoreInterrupts(s);
             return i;
         }
-        restoreInterrupts(s);
+//        restoreInterrupts(s);
     }
     return -1;
 }
 
 int I2S::playMonoRight(const int16_t *data, uint32_t len, float vol, float speed, uint32_t offset) {
     for (int i = 0; i < MAX_SAMPLES; i++) {
-        uint32_t s = disableInterrupts();
+//        uint32_t s = disableInterrupts();
         if ((_samples[i].flags & SMP_ACTIVE) == 0) {
             _samples[i].speed = speed;
             _samples[i].vol = vol;
@@ -392,17 +423,17 @@ int I2S::playMonoRight(const int16_t *data, uint32_t len, float vol, float speed
             _samples[i].pos = offset;
             _samples[i].offset = offset;
             _samples[i].flags = SMP_ACTIVE | SMP_RIGHT | SMP_PLAYING;
-            restoreInterrupts(s);
+//            restoreInterrupts(s);
             return i;
         }
-        restoreInterrupts(s);
+//        restoreInterrupts(s);
     }
     return -1;
 }
 
 int I2S::playMonoRight(DFILE &file, float vol, float speed, uint32_t offset) {
     for (int i = 0; i < MAX_SAMPLES; i++) {
-        uint32_t s = disableInterrupts();
+//        uint32_t s = disableInterrupts();
         if ((_samples[i].flags & SMP_ACTIVE) == 0) {
             _samples[i].speed = speed;
             _samples[i].vol = vol;
@@ -412,10 +443,10 @@ int I2S::playMonoRight(DFILE &file, float vol, float speed, uint32_t offset) {
             _samples[i].pos = offset;
             _samples[i].offset = offset;
             _samples[i].flags = SMP_ACTIVE | SMP_RIGHT | SMP_PLAYING;
-            restoreInterrupts(s);
+//            restoreInterrupts(s);
             return i;
         }
-        restoreInterrupts(s);
+//        restoreInterrupts(s);
     }
     return -1;
 }
@@ -429,7 +460,12 @@ void I2S::cancel(int s) {
 void I2S::stop(int s) {
     if (s >= MAX_SAMPLES) return;
     if (s < 0) return;
-    _samples[s].flags &= ~SMP_PLAYING;
+    if (_samples[s].flags & SMP_AFTERTOUCH) {
+        _samples[s].pos = _samples[s].loop_end;
+        _samples[s].flags &= ~SMP_LOOP;
+    } else {
+        _samples[s].flags &= ~SMP_PLAYING;
+    }
 }
 
 void I2S::resume(int s) {
@@ -444,16 +480,31 @@ void I2S::setVolume(int s, float v) {
     _samples[s].vol = v;
 }
 
-void I2S::enableLoop(int s) {
+void I2S::setSpeed(int s, float v) {
+    if (s >= MAX_SAMPLES) return;
+    if (s < 0) return;
+    _samples[s].speed = v;
+}
+
+void I2S::enableLoop(int s, int st, int e, bool a) {
     if (s >= MAX_SAMPLES) return;
     if (s < 0) return;
     _samples[s].flags |= SMP_LOOP;
+    _samples[s].loop_start = st;
+    _samples[s].loop_end = e;
+    if (a) _samples[s].flags |= SMP_AFTERTOUCH;
 }
 
 void I2S::disableLoop(int s) {
     if (s >= MAX_SAMPLES) return;
     if (s < 0) return;
     _samples[s].flags &= ~SMP_LOOP;
+}
+
+bool I2S::isPlaying(int s) {
+    if (s >= MAX_SAMPLES) return false;
+    if (s < 0) return false;
+    return _samples[s].flags & SMP_PLAYING;
 }
 
 bool I2S::fillMono(int16_t s) {
@@ -518,3 +569,21 @@ bool I2S::fill(int16_t s) {
     }
     return false;
 }
+
+int16_t I2S::mix(int16_t a, int16_t b)
+{
+    int z;
+    unsigned int fa, fb, fz;
+    fa = a + 32768;
+    fb = b + 32768;
+
+    if (fa < 32768 && fb < 32768) {
+        fz = (fa * fb) / 32768;
+    } else {
+        fz = (2 * (fa + fb)) - ((fa * fb) / 32768) - 65536;
+    }
+
+    z = fz - 32768;
+    return z;
+}
+
