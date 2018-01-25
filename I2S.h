@@ -8,6 +8,31 @@
 #include <DSPI.h>
 #include <DFATFS.h>
 
+
+class DAC {
+    public:
+        virtual void setGain(int8_t vol) = 0;
+        virtual void setVolume(uint8_t v) = 0;
+        virtual void setVolume(uint8_t l, uint8_t r) = 0;
+        virtual void setBass(int8_t cut) = 0;
+        virtual void setMid(int8_t cut) = 0;
+        virtual void setTreble(int8_t cut) = 0;
+
+        virtual void enable3D() = 0;
+        virtual void disable3D() = 0;
+        virtual void setWide3D() = 0;
+        virtual void setNarrow3D() = 0;
+        virtual void set3DDepth(uint8_t w) = 0;
+};
+
+class Amplifier {
+    public:
+        virtual void setGain(int8_t vol) = 0;
+        virtual void enableAmplifier() = 0;
+        virtual void disableAmplifier() = 0;
+};
+
+
 struct sample_s {
     const int16_t *data;    // Data in memory to play
     DFILE *file;            // File to play samples from
