@@ -1,0 +1,21 @@
+Source: i2s
+Section: main
+XBSC-Family: pic32
+Priority: extra
+Maintainer: Matt Jenkins <matt@majenko.co.uk>
+XBSC-TieCore: chipkit
+Build-Depends: debhelper (>= 8.0.0)
+Standards-Version: 3.9.4
+
+Package: libi2s-chipkit
+Section: main
+Architecture: all
+XBSC-Group: Libraries
+XBSC-SubGroup: Audio
+Depends: chipkit
+Provides: I2S.h
+Description: I2S library for chipkit
+ I2S implementation for chipKIT
+
+
+
