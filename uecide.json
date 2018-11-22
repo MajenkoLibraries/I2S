@@ -1,0 +1,17 @@
+{
+    "name": "I2S",
+    "provides": "I2S.h",
+    "license": "LICENSE.md",
+    "readme": "README.md",
+    "description": "I2S Driver for chipKIT",
+    "category": "Audio",
+    "subcategory": "Control",
+    "maintainer": "Matt Jenkins <matt@majenko.co.uk>",
+    "version": "1.0.0",
+    "family": "pic32",
+    "core": "chipkit",
+    "install": {
+        "I2S.cpp": "/",
+        "I2S.h": "/"
+    }
+}
