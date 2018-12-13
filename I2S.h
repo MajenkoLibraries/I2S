@@ -99,6 +99,8 @@ class I2S {
         static void __USER_ISR DMA1ISR(void);
         static void __USER_ISR DMA2ISR(void);
 
+        static void (*_hookPeak)(int32_t, int32_t);
+
 	public:
 		I2S(uint32_t sr);
 		void begin();
@@ -125,6 +127,8 @@ class I2S {
         void disableLoop(int s);
         bool isPlaying(int s);
         void setSampleRate(uint32_t r);
+
+        static void hookPeak(void (*f)(int32_t, int32_t)) { _hookPeak = f; }
 };
 
 #endif

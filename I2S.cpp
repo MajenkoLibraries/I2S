@@ -7,6 +7,8 @@ bool I2S::_bufferBFull = false;
 uint32_t I2S::_bufferPos = 0;
 uint32_t I2S::_sampleRate = 0;
 
+void (*I2S::_hookPeak)(int32_t, int32_t) = NULL;
+
 sample I2S::_samples[MAX_SAMPLES];
 
 I2S::I2S(uint32_t s) {
@@ -171,6 +173,9 @@ bool I2S::doFillBuffer(int32_t *buf) {
 //    }
 //    if (cnt == 0) return false;
 
+    int32_t peakLeft = 0;
+    int32_t peakRight = 0;
+
     for (int sno = 0; sno < BSIZE/2; sno++) {
         int32_t left = 0;
         int32_t right = 0;
@@ -190,6 +195,7 @@ bool I2S::doFillBuffer(int32_t *buf) {
 //                            float high = _samples[i].data[p+2] * pct;
 //                            left = mix(left, (low + high) * _samples[i].vol);
                             left = mix(left, _samples[i].data[p] * _samples[i].vol);
+                            if (abs(left) > peakLeft) peakLeft = abs(left);
                         }
                         if (_samples[i].flags & SMP_RIGHT) {
 //                            playingr++;
@@ -197,6 +203,7 @@ bool I2S::doFillBuffer(int32_t *buf) {
 //                            float high = _samples[i].data[p+3] * pct;
 //                            right = mix(right, (low + high) * _samples[i].vol);
                             right = mix(right, _samples[i].data[p+1] * _samples[i].vol);
+                            if (abs(right) > peakRight) peakRight = abs(right);
                         }
                     } else {
                         if (_samples[i].flags & SMP_LEFT) {
@@ -205,6 +212,7 @@ bool I2S::doFillBuffer(int32_t *buf) {
 //                            float high = _samples[i].data[p+1] * pct;
 //                            left = mix(left, (low + high) * _samples[i].vol);
                             left = mix(left, _samples[i].data[p] * _samples[i].vol);
+                            if (abs(left) > peakLeft) peakLeft = abs(left);
                         }
                         if (_samples[i].flags & SMP_RIGHT) {
 //                            playingr++;
@@ -212,6 +220,7 @@ bool I2S::doFillBuffer(int32_t *buf) {
 //                            float high = _samples[i].data[p+1] * pct;
 //                            right = mix(right, (low + high) * _samples[i].vol);
                             right = mix(right, _samples[i].data[p] * _samples[i].vol);
+                            if (abs(right) > peakRight) peakRight = abs(right);
                         }
                     }
 
@@ -244,10 +253,12 @@ bool I2S::doFillBuffer(int32_t *buf) {
                             if (_samples[i].flags & SMP_LEFT) {
 //                                playingl++;
                                 left = mix(left, sl * _samples[i].vol);
+                                if (abs(left) > peakLeft) peakLeft = abs(left);
                             }
                             if (_samples[i].flags & SMP_RIGHT) {
 //                                playingr++;
                                 right = mix(right, sr * _samples[i].vol);
+                                if (abs(right) > peakRight) peakRight = abs(right);
                             }
                         }
                     } else {
@@ -265,10 +276,12 @@ bool I2S::doFillBuffer(int32_t *buf) {
                             if (_samples[i].flags & SMP_LEFT) {
 //                                playingl++;
                                 left = mix(left, sm * _samples[i].vol);
+                                if (abs(left) > peakLeft) peakLeft = abs(left);
                             }
                             if (_samples[i].flags & SMP_RIGHT) {
 //                                playingr++;
                                 right = mix(right, sm * _samples[i].vol);
+                                if (abs(right) > peakRight) peakRight = abs(right);
                             }
                         }
                     }
@@ -287,6 +300,10 @@ bool I2S::doFillBuffer(int32_t *buf) {
 //            right /= playingr;
             buf[(sno<<1) + 1] = right << 16;
 //        }
+    }
+
+    if (_hookPeak != NULL) {
+        _hookPeak(peakLeft, peakRight);
     }
     return true;
 }
