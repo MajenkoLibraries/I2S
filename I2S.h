@@ -8,6 +8,36 @@
 #include <DSPI.h>
 #include <DFATFS.h>
 
+class AudioSource {
+    public:
+        /*! Get the next N frames as signed 16-bit samples. The audio source must convert the samples
+         *  internally into signed 16 bit values and fill the array as it sees fit. The I2C system
+         *  will interpret the sample sequence into frames using getChannels() to demultiplex the
+         *  data into left and right or duplicate into both.
+         *
+         *  Returns the number of samples actually placed into the samples array.
+         */
+        virtual uint32_t getNextSampleBlock(int16_t *samples, uint32_t maxlen) = 0;
+
+        /*! Returns the number of frames within the entire audio source.  A frame consists of one sample
+         *  per channel.
+         */
+        virtual uint32_t getFrameLength() = 0;
+
+        /*! Return the number of channels in a single frame. Either 1 or 2 are valid values currently.
+         */
+        virtual uint32_t getChannels() = 0;
+
+        /*! Position the start of the next "getNextSampleBlock" call to the specified frame. Returns
+         *  the actual frame number seeked to (sooked to? enseeken to?) in the case the source cannot
+         *  get to the exact frame specified.
+         */
+        virtual uint32_t seekToFrame(uint32_t frame) = 0;
+
+        /*! Initialize the audio stream ready for playing.
+         */
+        virtual void initStream() = 0;
+};
 
 class DAC {
     public:
@@ -34,31 +64,25 @@ class Amplifier {
 
 
 struct sample_s {
-    const int16_t *data;    // Data in memory to play
-    DFILE *file;            // File to play samples from
-    uint32_t len;           // Length in samples
-    float pos;              // Playback position in samples. Needs to be float to make the speed calculations easier
-    float speed;            // Fractional playback speed (1.0 = normal speed)
+    AudioSource *source;    // Source to get the audio from
+    uint32_t pos;           // Playback position in samples. Needed for looping.
     float vol;              // Fractional playback volume (1.0 = normal volume)
     uint8_t flags;          // Various settings for the sample
-    uint32_t offset;        // Offset to start playing from
     uint32_t loop_start;    // When looping go back to here
     uint32_t loop_end;      // Loop back when you get here, and play from here for aftertouch
 };
 
 #define MAX_SAMPLES 50
 
-// This sample is active
-#define SMP_ACTIVE      0x01
-
-// This is a stereo sample data set
-#define SMP_STEREO      0x02
 
 // Play the sample out of the left speaker
-#define SMP_LEFT        0x04
+#define SMP_LEFT        0x01
 
 // Play the sample out of the right speaker
-#define SMP_RIGHT       0x08
+#define SMP_RIGHT       0x02
+
+// This sample is active
+#define SMP_ACTIVE      0x04
 
 // Loop the sample until stopper
 #define SMP_LOOP        0x10
@@ -110,18 +134,15 @@ class I2S {
         bool fill(int16_t s1, int16_t s2);
         bool fillMono(int16_t sample);
 
-        int playStereo(const int16_t *samples, uint32_t len, float volume, float speed, uint32_t offset = 0);
-        int playStereo(DFILE &file, float volume, float speed, uint32_t offset = 0);
-        int playMono(const int16_t *samples, uint32_t len, float volume, float speed, uint32_t offset = 0);
-        int playMono(DFILE &file, float volume, float speed, uint32_t offset = 0);
-        int playMonoLeft(const int16_t *samples, uint32_t len, float volume, float speed, uint32_t offset = 0);
-        int playMonoLeft(DFILE &file, float volume, float speed, uint32_t offset = 0);
-        int playMonoRight(const int16_t *samples, uint32_t len, float volume, float speed, uint32_t offset = 0);
-        int playMonoRight(DFILE &file, float volume, float speed, uint32_t offset = 0);
+        // New AudioSource based playing. No option for mono or stereo - the source dictates
+        // the mode. You can choose to only play through one channel though.
+        int play(AudioSource *source, float volume);
+        int playLeft(AudioSource *source, float volume);
+        int playRight(AudioSource *source, float volume);
+
         void stop(int s);
         void resume(int s);
         void cancel(int s);
-        void setSpeed(int s, float v);
         void setVolume(int s, float v);
         void enableLoop(int s, int st, int e, bool a);
         void disableLoop(int s);
@@ -129,6 +150,7 @@ class I2S {
         void setSampleRate(uint32_t r);
 
         static void hookPeak(void (*f)(int32_t, int32_t)) { _hookPeak = f; }
+
 };
 
 #endif

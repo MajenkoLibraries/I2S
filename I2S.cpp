@@ -164,306 +164,139 @@ void __USER_ISR I2S::DMA2ISR(void) {
 }
 
 bool I2S::doFillBuffer(int32_t *buf) {
-//    int cnt = 0;
-//    for (int i = 0; i < MAX_SAMPLES; i++) {
-//        if (_samples[i].flags & SMP_ACTIVE) {
-//            cnt++;
-//            break;
-//        }
-//    }
-//    if (cnt == 0) return false;
+    for (int i = 0; i < BSIZE; i++) {
+        buf[i] = 0;
+    }
 
-    int32_t peakLeft = 0;
-    int32_t peakRight = 0;
+    for (int smpNo = 0; smpNo < MAX_SAMPLES; smpNo++) {
+        if (_samples[smpNo].source != NULL) {
+            if ((_samples[smpNo].flags & SMP_ACTIVE) && (_samples[smpNo].flags & SMP_PLAYING)) {
+                uint32_t chans = _samples[smpNo].source->getChannels();
+                if (chans == 1) {
+                    int16_t sampleSet[BSIZE/2];
+                    uint32_t nsamples = _samples[smpNo].source->getNextSampleBlock(sampleSet, BSIZE/2);
 
-    for (int sno = 0; sno < BSIZE/2; sno++) {
-        int32_t left = 0;
-        int32_t right = 0;
-//        int playingl = 0;
-//        int playingr = 0;
+                    _samples[smpNo].pos += nsamples;
+                    if (_samples[smpNo].flags & SMP_LOOP) {
+                        if (_samples[smpNo].pos >= _samples[smpNo].loop_end) {
+                            int overflow = _samples[smpNo].pos - _samples[smpNo].loop_end;
+                            nsamples -= overflow;
+                        } 
 
-        for (int i = 0; i < MAX_SAMPLES; i++) {
-            if ((_samples[i].flags & SMP_ACTIVE) && (_samples[i].flags & SMP_PLAYING)) {
-                if (_samples[i].data != NULL) {
-                    uint32_t p = (uint32_t)_samples[i].pos;
-//                    float pct = _samples[i].pos - (int)_samples[i].pos;
-                    if (_samples[i].flags & SMP_STEREO) {
-                        p <<= 1; // Double it
-                        if (_samples[i].flags & SMP_LEFT) {
-//                            playingl++;
-//                            float low = _samples[i].data[p] * (1.0-pct);
-//                            float high = _samples[i].data[p+2] * pct;
-//                            left = mix(left, (low + high) * _samples[i].vol);
-                            left = mix(left, _samples[i].data[p] * _samples[i].vol);
-                            if (abs(left) > peakLeft) peakLeft = abs(left);
-                        }
-                        if (_samples[i].flags & SMP_RIGHT) {
-//                            playingr++;
-//                            float low = _samples[i].data[p+1] * (1.0-pct);
-//                            float high = _samples[i].data[p+3] * pct;
-//                            right = mix(right, (low + high) * _samples[i].vol);
-                            right = mix(right, _samples[i].data[p+1] * _samples[i].vol);
-                            if (abs(right) > peakRight) peakRight = abs(right);
-                        }
+                        _samples[smpNo].source->seekToFrame(_samples[smpNo].loop_start);
+                        nsamples += _samples[smpNo].source->getNextSampleBlock(&sampleSet[nsamples], (BSIZE/2) - nsamples);
                     } else {
-                        if (_samples[i].flags & SMP_LEFT) {
-//                            playingl++;
-//                            float low = _samples[i].data[p] * (1.0-pct);
-//                            float high = _samples[i].data[p+1] * pct;
-//                            left = mix(left, (low + high) * _samples[i].vol);
-                            left = mix(left, _samples[i].data[p] * _samples[i].vol);
-                            if (abs(left) > peakLeft) peakLeft = abs(left);
-                        }
-                        if (_samples[i].flags & SMP_RIGHT) {
-//                            playingr++;
-//                            float low = _samples[i].data[p] * (1.0-pct);
-//                            float high = _samples[i].data[p+1] * pct;
-//                            right = mix(right, (low + high) * _samples[i].vol);
-                            right = mix(right, _samples[i].data[p] * _samples[i].vol);
-                            if (abs(right) > peakRight) peakRight = abs(right);
+                        if (nsamples < BSIZE/2) {
+                            _samples[smpNo].flags = 0; // Stop playing - we reached the end!
                         }
                     }
 
-                    _samples[i].pos += _samples[i].speed;
-
-                    if (_samples[i].flags & SMP_LOOP) {
-                        if (_samples[i].pos >= _samples[i].loop_end) {
-                            _samples[i].pos = _samples[i].loop_start;
+                    for (int i = 0; i < nsamples; i++) {
+                        if (_samples[smpNo].flags & SMP_LEFT) {
+                            buf[i << 1] = mix(buf[i << 1], sampleSet[i] * _samples[smpNo].vol);
                         }
-                    } else {
-                        if (((uint32_t)_samples[i].pos) >= _samples[i].len) {
-                            _samples[i].flags = 0;
+                        if (_samples[smpNo].flags & SMP_RIGHT) {
+                            buf[(i << 1) + 1] = mix(buf[(i << 1) + 1], sampleSet[i] * _samples[smpNo].vol);
                         }
                     }
-                } else if (_samples[i].file != NULL) {
-                    if (_samples[i].flags & SMP_STEREO) {
-                        int16_t sl, sr;
-                        uint32_t nrl = 0;
-                        uint32_t nrr = 0;
-                        _samples[i].file->fsread(&sl, 2, &nrl);
-                        _samples[i].file->fsread(&sr, 2, &nrr);
+                } else {
+                    int16_t sampleSet[BSIZE];
+                    uint32_t nsamples = _samples[smpNo].source->getNextSampleBlock(sampleSet, BSIZE);
 
-                        if ((nrl != 2) || (nrr != 2)) {
-                            if (_samples[i].flags & SMP_LOOP) {
-                                _samples[i].file->fslseek(_samples[i].offset);
-                            } else {
-                                _samples[i].flags = 0;
-                            }
-                        } else {
-                            if (_samples[i].flags & SMP_LEFT) {
-//                                playingl++;
-                                left = mix(left, sl * _samples[i].vol);
-                                if (abs(left) > peakLeft) peakLeft = abs(left);
-                            }
-                            if (_samples[i].flags & SMP_RIGHT) {
-//                                playingr++;
-                                right = mix(right, sr * _samples[i].vol);
-                                if (abs(right) > peakRight) peakRight = abs(right);
-                            }
-                        }
+
+                    _samples[smpNo].pos += nsamples/2;
+                    if (_samples[smpNo].flags & SMP_LOOP) {
+                        if (_samples[smpNo].pos >= _samples[smpNo].loop_end) {
+                            int overflow = _samples[smpNo].pos - _samples[smpNo].loop_end;
+                            nsamples -= overflow;
+                        } 
+
+                        _samples[smpNo].source->seekToFrame(_samples[smpNo].loop_start);
+                        nsamples += _samples[smpNo].source->getNextSampleBlock(&sampleSet[nsamples], (BSIZE) - nsamples);
                     } else {
-                        int16_t sm;
-                        uint32_t nr = 0;
-                        _samples[i].file->fsread(&sm, 2, &nr);
+                        if (nsamples < BSIZE) {
+                            _samples[smpNo].flags = 0; // Stop playing - we reached the end!
+                        }
+                    }
 
-                        if (nr != 2) {
-                            if (_samples[i].flags & SMP_LOOP) {
-                                _samples[i].file->fslseek(_samples[i].offset);
-                            } else {
-                                _samples[i].flags = 0;
+                    for (int i = 0; i < nsamples; i++) {
+                        if ((i & 0x01) == 0) { // Left sample
+                            if (_samples[smpNo].flags & SMP_LEFT) {
+                                buf[i] = mix(buf[i], sampleSet[i] * _samples[smpNo].vol);
                             }
                         } else {
-                            if (_samples[i].flags & SMP_LEFT) {
-//                                playingl++;
-                                left = mix(left, sm * _samples[i].vol);
-                                if (abs(left) > peakLeft) peakLeft = abs(left);
-                            }
-                            if (_samples[i].flags & SMP_RIGHT) {
-//                                playingr++;
-                                right = mix(right, sm * _samples[i].vol);
-                                if (abs(right) > peakRight) peakRight = abs(right);
+                            if (_samples[smpNo].flags & SMP_RIGHT) {
+                                buf[i] = mix(buf[i], sampleSet[i] * _samples[smpNo].vol);
                             }
                         }
                     }
                 }
             }
         }
-//        if (playingl == 0) {
-//            buf[sno<<1] = 0;
-//        } else {
-//            left /= playingl;
-            buf[sno<<1] = left << 16;
-//        }
-//        if (playingr == 0) {
-//            buf[(sno<<1) + 1] = 0;
-//        } else {
-//            right /= playingr;
-            buf[(sno<<1) + 1] = right << 16;
-//        }
     }
 
+
+    int32_t peakLeft = 0;
+    int32_t peakRight = 0;
+    for (int i = 0; i < BSIZE/2; i++) {
+
+        int32_t l = abs(buf[i << 1]);
+        int32_t r = abs(buf[(i << 1) + 1]);
+        if (l > peakLeft) peakLeft = l;
+        if (r > peakRight) peakRight = r;
+
+    }
     if (_hookPeak != NULL) {
         _hookPeak(peakLeft, peakRight);
     }
+    for (int i = 0; i < BSIZE; i++) {
+        buf[i] <<= 16;
+    }
+
     return true;
 }
 
-int I2S::playStereo(const int16_t *data, uint32_t len, float vol, float speed, uint32_t offset) {
+int I2S::play(AudioSource *s, float vol) {
     for (int i = 0; i < MAX_SAMPLES; i++) {
-//        uint32_t s = disableInterrupts();
         if ((_samples[i].flags & SMP_ACTIVE) == 0) {
-            _samples[i].speed = speed;
+            s->initStream();
+            s->seekToFrame(0);
+            _samples[i].source = s;
             _samples[i].vol = vol;
-            _samples[i].data = data;
-            _samples[i].file = NULL;
-            _samples[i].len = len;
-            _samples[i].pos = offset;
-            _samples[i].offset = offset;
-            _samples[i].flags = SMP_ACTIVE | SMP_STEREO | SMP_LEFT | SMP_RIGHT | SMP_PLAYING;
-//            restoreInterrupts(s);
+            _samples[i].pos = 0;
+            _samples[i].flags = SMP_ACTIVE | SMP_RIGHT | SMP_LEFT | SMP_PLAYING;
             return i;
         }
-//        restoreInterrupts(s);
     }
     return -1;
 }
 
-int I2S::playStereo(DFILE &file, float vol, float speed, uint32_t offset) {
+int I2S::playLeft(AudioSource *s, float vol) {
     for (int i = 0; i < MAX_SAMPLES; i++) {
-//        uint32_t s = disableInterrupts();
         if ((_samples[i].flags & SMP_ACTIVE) == 0) {
-            _samples[i].speed = speed;
+            s->initStream();
+            s->seekToFrame(0);
+            _samples[i].source = s;
             _samples[i].vol = vol;
-            _samples[i].data = NULL;
-            _samples[i].file = &file;
-            _samples[i].len = 0;
-            _samples[i].pos = offset;
-            _samples[i].offset = offset;
-            _samples[i].flags = SMP_ACTIVE | SMP_STEREO | SMP_LEFT | SMP_RIGHT | SMP_PLAYING;
-//            restoreInterrupts(s);
-            return i;
-        }
-//        restoreInterrupts(s);
-    }
-    return -1;
-}
-
-int I2S::playMono(const int16_t *data, uint32_t len, float vol, float speed, uint32_t offset) {
-    for (int i = 0; i < MAX_SAMPLES; i++) {
-//        uint32_t s = disableInterrupts();
-        if ((_samples[i].flags & SMP_ACTIVE) == 0) {
-            _samples[i].speed = speed;
-            _samples[i].vol = vol;
-            _samples[i].data = data;
-            _samples[i].file = NULL;
-            _samples[i].len = len;
-            _samples[i].pos = offset;
-            _samples[i].offset = offset;
-            _samples[i].flags = SMP_ACTIVE | SMP_LEFT | SMP_RIGHT | SMP_PLAYING;
-//            restoreInterrupts(s);
-            return i;
-        }
-//        restoreInterrupts(s);
-    }
-    return -1;
-}
-
-int I2S::playMono(DFILE &file, float vol, float speed, uint32_t offset) {
-    for (int i = 0; i < MAX_SAMPLES; i++) {
-//        uint32_t s = disableInterrupts();
-        if ((_samples[i].flags & SMP_ACTIVE) == 0) {
-            _samples[i].speed = speed;
-            _samples[i].vol = vol;
-            _samples[i].data = NULL;
-            _samples[i].file = &file;
-            _samples[i].len = 0;
-            _samples[i].pos = offset;
-            _samples[i].offset = offset;
-            _samples[i].flags = SMP_ACTIVE | SMP_LEFT | SMP_RIGHT | SMP_PLAYING;
-//            restoreInterrupts(s);
-            return i;
-        }
-//        restoreInterrupts(s);
-    }
-    return -1;
-}
-
-int I2S::playMonoLeft(const int16_t *data, uint32_t len, float vol, float speed, uint32_t offset) {
-    for (int i = 0; i < MAX_SAMPLES; i++) {
-//        uint32_t s = disableInterrupts();
-        if ((_samples[i].flags & SMP_ACTIVE) == 0) {
-            _samples[i].speed = speed;
-            _samples[i].vol = vol;
-            _samples[i].data = data;
-            _samples[i].file = NULL;
-            _samples[i].len = len;
-            _samples[i].pos = offset;
-            _samples[i].offset = offset;
+            _samples[i].pos = 0;
             _samples[i].flags = SMP_ACTIVE | SMP_LEFT | SMP_PLAYING;
-//            restoreInterrupts(s);
             return i;
         }
-//        restoreInterrupts(s);
     }
     return -1;
 }
 
-int I2S::playMonoLeft(DFILE &file, float vol, float speed, uint32_t offset) {
+int I2S::playRight(AudioSource *s, float vol) {
     for (int i = 0; i < MAX_SAMPLES; i++) {
-//        uint32_t s = disableInterrupts();
         if ((_samples[i].flags & SMP_ACTIVE) == 0) {
-            _samples[i].speed = speed;
+            s->initStream();
+            s->seekToFrame(0);
+            _samples[i].source = s;
             _samples[i].vol = vol;
-            _samples[i].data = NULL;
-            _samples[i].file = &file;
-            _samples[i].len = 0;
-            _samples[i].pos = offset;
-            _samples[i].offset = offset;
-            _samples[i].flags = SMP_ACTIVE | SMP_LEFT | SMP_PLAYING;
-//            restoreInterrupts(s);
-            return i;
-        }
-//        restoreInterrupts(s);
-    }
-    return -1;
-}
-
-int I2S::playMonoRight(const int16_t *data, uint32_t len, float vol, float speed, uint32_t offset) {
-    for (int i = 0; i < MAX_SAMPLES; i++) {
-//        uint32_t s = disableInterrupts();
-        if ((_samples[i].flags & SMP_ACTIVE) == 0) {
-            _samples[i].speed = speed;
-            _samples[i].vol = vol;
-            _samples[i].data = data;
-            _samples[i].file = NULL;
-            _samples[i].len = len;
-            _samples[i].pos = offset;
-            _samples[i].offset = offset;
+            _samples[i].pos = 0;
             _samples[i].flags = SMP_ACTIVE | SMP_RIGHT | SMP_PLAYING;
-//            restoreInterrupts(s);
             return i;
         }
-//        restoreInterrupts(s);
-    }
-    return -1;
-}
-
-int I2S::playMonoRight(DFILE &file, float vol, float speed, uint32_t offset) {
-    for (int i = 0; i < MAX_SAMPLES; i++) {
-//        uint32_t s = disableInterrupts();
-        if ((_samples[i].flags & SMP_ACTIVE) == 0) {
-            _samples[i].speed = speed;
-            _samples[i].vol = vol;
-            _samples[i].data = NULL;
-            _samples[i].file = &file;
-            _samples[i].len = 0;
-            _samples[i].pos = offset;
-            _samples[i].offset = offset;
-            _samples[i].flags = SMP_ACTIVE | SMP_RIGHT | SMP_PLAYING;
-//            restoreInterrupts(s);
-            return i;
-        }
-//        restoreInterrupts(s);
     }
     return -1;
 }
@@ -495,12 +328,6 @@ void I2S::setVolume(int s, float v) {
     if (s >= MAX_SAMPLES) return;
     if (s < 0) return;
     _samples[s].vol = v;
-}
-
-void I2S::setSpeed(int s, float v) {
-    if (s >= MAX_SAMPLES) return;
-    if (s < 0) return;
-    _samples[s].speed = v;
 }
 
 void I2S::enableLoop(int s, int st, int e, bool a) {
