@@ -1,25 +1,27 @@
-#ifndef _WAV_FILE_H
-#define _WAV_FILE_H
+#ifndef _WAV_DATA_H
+#define _WAV_DATA_H
 
 #include <I2S.h>
-#include <DFATFS.h>
+#include <WavData.h>
 
 #include "WavCommon.h"
 
-class WavFile : public AudioSource {
+class WavData : public AudioSource {
     private:
-        DFILE *_file;
+        const uint8_t *_data;
+        const uint8_t *_pos;
+        const uint8_t *_end;
 
-        wav_header _header;
+        wav_header *_header;
 
-        bool initFile();
         uint32_t getNextSampleBlock8(int16_t *buf, uint32_t samps);
         uint32_t getNextSampleBlock16(int16_t *buf, uint32_t samps);
 
+        void initData();
+
     public:
 
-        WavFile(DFILE &f) : _file(&f) {}
-        WavFile(DFILE *f) : _file(f) {}
+        WavData(const uint8_t *d) : _data(d) {}
 
         void initStream();
         uint32_t seekToFrame(uint32_t frame);
