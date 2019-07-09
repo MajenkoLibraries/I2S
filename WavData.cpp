@@ -5,25 +5,19 @@ void WavData::initData() {
     _pos = _data;
     _header = (wav_header *)_data;
     if (strncmp(_header->riff_header, "RIFF", 4) != 0) {
-        Serial.println("Not RIFF");
         return; // Not RIFF file
     }
     if (strncmp(_header->wave_header, "WAVE", 4) != 0) {
-        Serial.println("Not WAVE");
         return; // Not WAVE file
     }
     if (strncmp(_header->fmt_header, "fmt ", 4) != 0) {
-        Serial.println("Bad format");
         return; // Corrupt header format
     }
     if (strncmp(_header->data_header, "data", 4) != 0) {
-        Serial.println("Bad data");
         return; // Corrupt header data
     }
 
     _end = &_data[sizeof(_header) + _header->data_bytes];
-    Serial.printf("Channels: %d\r\n", _header->num_channels);
-    Serial.printf("Bit depth: %d\r\n", _header->bit_depth);
 }
 
 uint32_t WavData::getNextSampleBlock8(int16_t *buf, uint32_t samps) {
