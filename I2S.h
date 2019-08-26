@@ -2,7 +2,7 @@
 #define _I2S_H
 
 //#define BSIZE 1024
-#define BSIZE 4096
+#define BSIZE 16384
 
 #include <Arduino.h>
 #include <DSPI.h>
@@ -129,6 +129,7 @@ class I2S {
 		I2S(uint32_t sr);
 		void begin();
         void end();
+        void process();
         bool ready() { return ((!_bufferAFull) || (!_bufferBFull)); }
         bool fill(int16_t sample);
         bool fill(int16_t s1, int16_t s2);

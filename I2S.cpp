@@ -45,10 +45,11 @@ void I2S::initDMA() {
     DCH1SSIZ = BSIZE*4;
     DCH1DSIZ = 4;
     DCH1CSIZ = 4;
+    DCH1CONbits.CHPRI = 0;
     DCH1ECONbits.SIRQEN = 1;
     DCH1ECONbits.CHSIRQ = _SPI2_TX_VECTOR;
     setIntVector(_DMA1_VECTOR, (isrFunc)I2S::DMA1ISR);
-    setIntPriority(_DMA1_VECTOR, 6, 0);
+    setIntPriority(_DMA1_VECTOR, 1, 0);
     clearIntFlag(_DMA1_VECTOR);
     setIntEnable(_DMA1_VECTOR);
     DCH1CONbits.CHAEN = 0;
@@ -60,10 +61,11 @@ void I2S::initDMA() {
     DCH2SSIZ = BSIZE*4;
     DCH2DSIZ = 4;
     DCH2CSIZ = 4;
+    DCH2CONbits.CHPRI = 0;
     DCH2ECONbits.SIRQEN = 1;
     DCH2ECONbits.CHSIRQ = _SPI2_TX_VECTOR;
     setIntVector(_DMA2_VECTOR, (isrFunc)I2S::DMA2ISR);
-    setIntPriority(_DMA2_VECTOR, 6, 0);
+    setIntPriority(_DMA2_VECTOR, 1, 0);
     clearIntFlag(_DMA2_VECTOR);
     setIntEnable(_DMA2_VECTOR);
     DCH2CONbits.CHAEN = 0;
@@ -146,9 +148,9 @@ void __USER_ISR I2S::DMA1ISR(void) {
     clearIntFlag(_DMA1_VECTOR);
     DCH1INTbits.CHSDIF = 0;
     _bufferAFull = 0;
-    if (doFillBuffer(_bufferA)) {
-        _bufferAFull = 1;
-    }
+//    if (doFillBuffer(_bufferA)) {
+//        _bufferAFull = 1;
+//    }
     //DCH2CONbits.CHEN = 1;
 }
 
@@ -157,10 +159,23 @@ void __USER_ISR I2S::DMA2ISR(void) {
     clearIntFlag(_DMA2_VECTOR);
     DCH2INTbits.CHSDIF = 0;
     _bufferBFull = 0;
-    if (doFillBuffer(_bufferB)) {
-        _bufferBFull = 1;
-    }
+//    if (doFillBuffer(_bufferB)) {
+//        _bufferBFull = 1;
+//    }
     //DCH1CONbits.CHEN = 1;
+}
+
+void I2S::process() {
+    if (_bufferAFull == 0) {
+        if(doFillBuffer(_bufferA)) {
+            _bufferAFull = 1;
+        }
+    }
+    if (_bufferBFull == 0) {
+        if(doFillBuffer(_bufferB)) {
+            _bufferBFull = 1;
+        }
+    }
 }
 
 bool I2S::doFillBuffer(int32_t *buf) {
